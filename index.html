@@ -376,13 +376,17 @@ table.dt tr.cl:hover td:first-child{color:var(--a2);}
       <button class="mode-btn" style="color:var(--green);border-color:rgba(40,212,128,.35);" onclick="exitAdmin()">나가기</button>
     </div>
 
-    <!-- 뷰어 전용: 공유 데이터 불러오기 -->
-    <div id="ctrl-viewer" class="load-shared-btn" onclick="document.getElementById('fi-json-viewer').click()">
-      <span style="font-size:15px">📂</span>
-      <span style="font-size:12px;color:var(--green);font-weight:500;">최신 데이터 불러오기</span>
-    </div>
-    <div style="font-size:9.5px;color:var(--t3);line-height:1.5;padding:4px 4px 6px;word-break:break-all;">
-      📁 Y:\Z공용폴더\02.부서별\01.영업팀\07.리테일팀\0. 쿠팡팀\Coupang\Rocket\광고운영\Dashboard
+    <!-- 뷰어 전용: 자동 로드 -->
+    <div id="ctrl-viewer">
+      <!-- 자동 로드 상태 -->
+      <div id="auto-load-box" style="background:rgba(40,212,128,.08);border:1px solid rgba(40,212,128,.2);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
+        <div id="auto-load-status" style="font-size:11px;color:var(--green);font-weight:500;margin-bottom:4px;">🔄 데이터 로드 중...</div>
+        <div id="auto-load-time" style="font-size:10px;color:var(--t3);"></div>
+      </div>
+      <!-- 새로고침 버튼 -->
+      <button onclick="refreshData()" style="width:100%;padding:7px;border-radius:7px;background:rgba(91,163,255,.1);border:1px solid rgba(91,163,255,.25);color:var(--a2);font-size:11px;cursor:pointer;font-family:var(--sans);margin-bottom:5px;">🔄 새로고침</button>
+      <!-- 수동 fallback -->
+      <div onclick="document.getElementById('fi-json-viewer').click()" style="font-size:10px;color:var(--t3);text-align:center;cursor:pointer;padding:3px;">📂 수동으로 불러오기</div>
     </div>
     <input type="file" id="fi-json-viewer" accept=".json" style="display:none" onchange="importDB(this)">
 
@@ -397,6 +401,7 @@ table.dt tr.cl:hover td:first-child{color:var(--a2);}
       <button class="clr-btn" style="flex:1;font-size:10px;" onclick="exportDB()" title="데이터를 JSON 파일로 저장">💾 백업</button>
       <button class="clr-btn" style="flex:1;font-size:10px;" onclick="document.getElementById('fi-json').click()" title="JSON 백업 파일 불러오기">📂 복원</button>
     </div>
+    <button id="ctrl-deploy" class="clr-btn" style="display:none;margin-top:4px;color:var(--green);border-color:rgba(40,212,128,.3);background:rgba(40,212,128,.05);" onclick="exportDataJson()" title="GitHub에 올릴 data.json 저장">📤 data.json 내보내기 (GitHub용)</button>
     <button id="ctrl-clear" class="clr-btn" style="display:none;margin-top:4px;" onclick="clearAll()">🗑️ DB 전체 초기화</button>
     <button id="ctrl-pin-change" class="clr-btn" style="display:none;margin-top:4px;color:var(--amber);border-color:rgba(245,191,32,.3);background:rgba(245,191,32,.05);" onclick="openPinModal('change')">🔑 PIN 변경</button>
   </div>
@@ -1090,6 +1095,7 @@ function applyMode(){
   backup.style.display=a?'flex':'none';
   document.getElementById('ctrl-clear').style.display=a?'block':'none';
   document.getElementById('ctrl-pin-change').style.display=a?'block':'none';
+  document.getElementById('ctrl-deploy').style.display=a?'block':'none';
 }
 
 function openPinModal(mode){
@@ -1137,6 +1143,63 @@ async function confirmPin(){
   }
 }
 function exitAdmin(){_isAdmin=false;applyMode();toast('뷰어 모드로 전환됨');}
+
+// ═══════════════════════════════════════════
+//  AUTO LOAD — data.json (GitHub Pages 공유)
+// ═══════════════════════════════════════════
+async function tryAutoLoad(){
+  try{
+    const resp=await fetch('./data.json?t='+Date.now(),{cache:'no-store'});
+    if(!resp.ok)return false;
+    const parsed=await resp.json();
+    if(!parsed.daily||typeof parsed.daily!=='object')return false;
+    DB=parsed;
+    await saveDB();
+    return Object.keys(parsed.daily).length;
+  }catch(e){return false;}
+}
+
+function setAutoStatus(state,cnt){
+  const box=document.getElementById('auto-load-box');
+  const st=document.getElementById('auto-load-status');
+  const tm=document.getElementById('auto-load-time');
+  if(!st)return;
+  if(state==='ok'){
+    box.style.borderColor='rgba(40,212,128,.2)';box.style.background='rgba(40,212,128,.08)';
+    st.style.color='var(--green)';st.textContent='✓ 최신 데이터 로드 완료';
+    tm.textContent=cnt+'일 데이터 · '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  }else if(state==='fail'){
+    box.style.borderColor='rgba(245,191,32,.2)';box.style.background='rgba(245,191,32,.05)';
+    st.style.color='var(--amber)';st.textContent='⚠️ 공유 데이터 없음';
+    tm.textContent='관리자가 data.json을 업로드해야 합니다';
+  }else{
+    st.style.color='var(--t2)';st.textContent='🔄 데이터 로드 중...';tm.textContent='';
+  }
+}
+
+async function refreshData(){
+  setAutoStatus('loading');
+  const cnt=await tryAutoLoad();
+  if(cnt){
+    setAutoStatus('ok',cnt);
+    initFilters();initCompare();renderAll();
+    toast('✓ 최신 데이터 로드 완료 — '+cnt+'일','#28d480');
+  }else{
+    setAutoStatus('fail');
+    toast('공유 데이터를 찾을 수 없습니다','#f5bf20');
+  }
+}
+
+function exportDataJson(){
+  const cnt=Object.keys(DB.daily).length;
+  if(!cnt){toast('저장된 데이터가 없습니다','#ff5a5a');return;}
+  const blob=new Blob([JSON.stringify(DB)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='data.json';
+  a.click();URL.revokeObjectURL(url);
+  toast('✓ data.json 저장 완료 — GitHub에 업로드하세요','#28d480');
+}
 
 async function saveDB(){try{await store.set(SK,JSON.stringify(DB));}catch(e){console.warn('DB 저장 오류',e);}}
 async function loadDB(){try{const v=await store.get(SK);if(v)DB=JSON.parse(v);}catch(e){console.warn('DB 로드 오류',e);}}
@@ -3220,8 +3283,15 @@ function loadSeed(){
 // ═══════════════════════════════════════════
 (async()=>{
   await loadDB();
-  if(!Object.keys(DB.daily).length){loadSeed();await saveDB();}
   applyMode();
+  // 자동 로드 시도 (GitHub Pages data.json)
+  const autoLoaded=await tryAutoLoad();
+  if(autoLoaded){
+    setAutoStatus('ok',autoLoaded);
+  }else{
+    if(!Object.keys(DB.daily).length){loadSeed();await saveDB();}
+    setAutoStatus('fail');
+  }
   initFilters();
   initCompare();
   // Sync date inputs with data range
