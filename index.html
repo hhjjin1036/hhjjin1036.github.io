@@ -6,6 +6,7 @@
 <title>쿠팡 로켓 광고 성과 대시보드</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg0:#0b1019;--bg1:#0f1824;--bg2:#142032;--bg3:#1a2a42;
@@ -351,6 +352,7 @@ table.dt tr.cl:hover td:first-child{color:var(--a2);}
   <div class="nav-item" data-v="compare"><span class="nav-ico">⚖️</span>비교 분석</div>
   <div class="nav-sec">보고서</div>
   <div class="nav-item" data-v="report"><span class="nav-ico">📋</span>보고서</div>
+  <div class="nav-item" data-v="weekly"><span class="nav-ico">📰</span>주간보고</div>
   <div class="nav-item" data-v="ai"><span class="nav-ico">🤖</span>AI 분석 엔진</div>
   <div class="nav-sp"></div>
   <div class="sb-bot">
@@ -838,7 +840,7 @@ table.dt tr.cl:hover td:first-child{color:var(--a2);}
     <!-- REPORT -->
     <div class="view" id="v-report">
       <div class="vt">보고서</div>
-      <div class="vs" id="report-basis-vs">선택 기간 성과 종합 — 임원 보고용</div>
+      <div class="vs" id="report-basis-vs">선택 기간 성과 종합</div>
       <div id="report-cmp-banner" style="display:none;margin-bottom:14px;" class="cbanner">
         📊 <span id="report-cmp-txt"></span> 기준 비교
       </div>
@@ -860,8 +862,87 @@ table.dt tr.cl:hover td:first-child{color:var(--a2);}
         <div class="pnl"><div class="ph"><div><div class="pt">캠페인 효율 매트릭스</div><div class="ps">광고비 vs ROAS · 원 크기=매출규모</div></div></div><div style="position:relative;height:240px;"><canvas id="matrixChart"></canvas></div><div style="font-size:10.5px;color:var(--t3);margin-top:6px;">우상단 = 고효율 고매출 / 좌하단 = 비효율</div></div>
       </div>
       <div class="pnl r1">
-        <div class="ph"><div><div class="pt">캠페인 종합 평가표</div><div class="ps">임원 보고용 · 광고비 기준 내림차순</div></div></div>
+        <div class="ph"><div><div class="pt">캠페인 종합 평가표</div><div class="ps">광고비 기준 내림차순</div></div></div>
         <div class="tsc"><table class="dt"><thead><tr><th>#</th><th>캠페인</th><th>광고비</th><th>전환매출</th><th>ROAS</th><th>주문수</th><th>CVR</th><th>CPA</th><th>AOV</th><th>등급</th><th>전략 제언</th></tr></thead><tbody id="ex-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- WEEKLY REPORT -->
+    <div class="view" id="v-weekly">
+      <div class="vt">📰 주간보고</div>
+      <div class="vs">선택 기간 기준 자동 생성 · PDF 또는 JPG로 다운로드</div>
+      <!-- 기간 설정 컨트롤 -->
+      <div class="pnl r1" style="padding:14px 18px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:600;color:var(--t1);flex-shrink:0;">📅 기준 기간</span>
+          <input type="date" class="date-inp" id="wk-base-from" onchange="wkBaseFrom=dateInpToKey(this.value);triggerWeekly();">
+          <span style="font-size:12px;color:var(--t2);">~</span>
+          <input type="date" class="date-inp" id="wk-base-to" onchange="wkBaseTo=dateInpToKey(this.value);triggerWeekly();">
+          <div class="fsep"></div>
+          <span style="font-size:12px;font-weight:600;color:var(--t1);flex-shrink:0;">🔁 비교 기간</span>
+          <div id="wk-cmp-presets" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="c2btn on" data-wct="week">전주 (WoW)</button>
+            <button class="c2btn" data-wct="month">전월 (MoM)</button>
+            <button class="c2btn" data-wct="quarter">3개월 전</button>
+            <button class="c2btn" data-wct="year">전년도</button>
+          </div>
+          <span style="font-size:11px;color:var(--t3);flex-shrink:0;" id="wk-cmp-label"></span>
+        </div>
+      </div>
+      <!-- 다운로드 버튼 -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+        <button onclick="downloadWeeklyPDF()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:8px;background:rgba(91,163,255,.12);border:1px solid rgba(91,163,255,.3);color:var(--a2);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">📄 PDF 저장</button>
+        <button onclick="downloadWeeklyJPG()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:8px;background:rgba(40,212,128,.1);border:1px solid rgba(40,212,128,.25);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">🖼️ JPG 저장</button>
+        <span style="font-size:11px;color:var(--t3);">A4 비율 · 인쇄 최적화</span>
+      </div>
+      <!-- A4 프리뷰 -->
+      <div id="weekly-a4" style="background:#fff;width:794px;max-width:100%;margin:0 auto;padding:32px 36px 28px;border-radius:4px;box-shadow:0 4px 24px rgba(0,0,0,.35);color:#1a1a2e;font-family:'IBM Plex Sans KR',sans-serif;box-sizing:border-box;">
+        <!-- 헤더 -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a2744;padding-bottom:12px;margin-bottom:18px;">
+          <div>
+            <div style="font-size:18px;font-weight:700;color:#1a2744;letter-spacing:-0.3px;">쿠팡 로켓 광고 주간보고</div>
+            <div style="font-size:11px;color:#5a6a80;margin-top:3px;" id="wk-period-label">기간 분석 중...</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;color:#7a8a9a;" id="wk-generated">생성일: —</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;justify-content:flex-end;">
+              <div style="font-size:11px;color:#5a6a80;">광고 효율 점수</div>
+              <div id="wk-score" style="font-size:22px;font-weight:800;color:#2563eb;">—</div>
+              <div style="font-size:10px;color:#9aabbb;">/100</div>
+            </div>
+          </div>
+        </div>
+        <!-- KPI 요약 -->
+        <div id="wk-kpi-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;"></div>
+        <!-- 차트 2x2 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
+          <div style="background:#f4f7ff;border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:600;color:#2563eb;margin-bottom:6px;">📈 광고비 추이</div>
+            <div style="position:relative;height:140px;"><canvas id="wk-c-cost"></canvas></div>
+          </div>
+          <div style="background:#f4f7ff;border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:600;color:#16a34a;margin-bottom:6px;">💰 전환매출 추이</div>
+            <div style="position:relative;height:140px;"><canvas id="wk-c-rev"></canvas></div>
+          </div>
+          <div style="background:#f4f7ff;border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:600;color:#d97706;margin-bottom:6px;">📊 ROAS 추이</div>
+            <div style="position:relative;height:140px;"><canvas id="wk-c-roas"></canvas></div>
+          </div>
+          <div style="background:#f4f7ff;border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:600;color:#0891b2;margin-bottom:6px;">🎯 CVR 추이</div>
+            <div style="position:relative;height:140px;"><canvas id="wk-c-cvr"></canvas></div>
+          </div>
+        </div>
+        <!-- AI 분석 요약 -->
+        <div style="background:#f8faff;border:1px solid #dce8ff;border-radius:8px;padding:14px 16px;">
+          <div style="font-size:12px;font-weight:700;color:#1a2744;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #dce8ff;">🤖 자동 분석 요약</div>
+          <div id="wk-ai-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:11px;color:#2a3a4a;line-height:1.6;"></div>
+        </div>
+        <!-- 풋터 -->
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid #e0e8f0;display:flex;justify-content:space-between;font-size:10px;color:#9aabbb;">
+          <span>쿠팡 로켓 광고 성과 대시보드 · 자동 생성</span>
+          <span id="wk-footer-date"></span>
+        </div>
       </div>
     </div>
 
@@ -1307,7 +1388,7 @@ function agg(dates){
 //  STATE
 // ═══════════════════════════════════════════
 let curV='overview',cmpMode='none',trendM='cost',fFrom='',fTo='';
-const VNAMES={overview:'종합 대시보드',campaign:'캠페인 분석',product:'상품 분석',keyword:'키워드 분석',daily:'일별 리포트',compare:'비교 분석',report:'보고서',ai:'AI 분석 엔진'};
+const VNAMES={overview:'종합 대시보드',campaign:'캠페인 분석',product:'상품 분석',keyword:'키워드 분석',daily:'일별 리포트',compare:'비교 분석',report:'보고서',weekly:'주간보고',ai:'AI 분석 엔진'};
 
 // ═══════════════════════════════════════════
 //  NAV
@@ -1587,6 +1668,7 @@ function renderView(v,a,ca){
   else if(v==='daily')renderDaily(a);
   else if(v==='compare'){initCompare();renderCompare();}
   else if(v==='report')renderReport(a,ca);
+  else if(v==='weekly'){initWeekly();renderWeekly(null,null);}
   else if(v==='ai')renderAI(a);
 }
 
@@ -2329,6 +2411,7 @@ function buildProductMatrix(prods){
 //  COMPARE — SIMPLIFIED: BASE PERIOD + TYPE
 // ═══════════════════════════════════════════
 let cmpBaseFrom='', cmpBaseTo='', cmpType='week';
+let wkBaseFrom='', wkBaseTo='', wkCmpType='week';
 // Keep legacy vars for initCompare compat
 let cmpAFrom='', cmpATo='', cmpBFrom='', cmpBTo='';
 
@@ -2390,6 +2473,15 @@ document.getElementById('cmp2-presets')?.addEventListener('click',e=>{
   btn.classList.add('on');
   cmpType=btn.dataset.ct;
   renderCompare();
+});
+
+// Weekly report type button events
+document.getElementById('wk-cmp-presets')?.addEventListener('click',e=>{
+  const btn=e.target.closest('.c2btn'); if(!btn||!btn.dataset.wct) return;
+  document.querySelectorAll('#wk-cmp-presets .c2btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  wkCmpType=btn.dataset.wct;
+  renderWeekly(null,null);
 });
 
 function renderCompare(){
@@ -2574,13 +2666,220 @@ function renderCompare(){
 }
 
 // ═══════════════════════════════════════════
+//  WEEKLY REPORT
+// ═══════════════════════════════════════════
+function triggerWeekly(){
+  renderWeekly(null,null);
+}
+
+function initWeekly(){
+  // 기본값: 전체 데이터의 마지막 7일
+  const all=Object.keys(DB.daily).sort();
+  if(!all.length)return;
+  const defTo=all[all.length-1];
+  const defFrom=all[Math.max(0,all.length-7)];
+  wkBaseFrom=wkBaseFrom||defFrom;
+  wkBaseTo=wkBaseTo||defTo;
+  const bfEl=document.getElementById('wk-base-from');
+  const btEl=document.getElementById('wk-base-to');
+  if(bfEl&&!bfEl.value) bfEl.value=toISO(wkBaseFrom);
+  if(btEl&&!btEl.value) btEl.value=toISO(wkBaseTo);
+}
+
+function renderWeekly(_a,_b){
+  // wkBaseFrom/wkBaseTo 기준으로 자체 집계
+  const all=Object.keys(DB.daily).sort();
+  if(!all.length)return;
+  if(!wkBaseFrom||!wkBaseTo) initWeekly();
+  const baseDates=all.filter(d=>d>=wkBaseFrom&&d<=wkBaseTo);
+  if(!baseDates.length){return;}
+  const ba=agg(baseDates);
+  const {dates:cmpDates}=getDerivedPeriod(wkBaseFrom,wkBaseTo,wkCmpType);
+  const ca2=cmpDates.length?agg(cmpDates):null;
+
+  const typeNames={week:'전주 (WoW)',month:'전월 (MoM)',quarter:'3개월 전',year:'전년도'};
+  const typeName=typeNames[wkCmpType]||wkCmpType;
+
+  const fmt=d=>`${d.slice(4,6)}.${d.slice(6,8)}`;
+  const rng=`${fmt(baseDates[0])}~${fmt(baseDates[baseDates.length-1])} (${baseDates.length}일)`;
+  const cmpRng=cmpDates.length?`${fmt(cmpDates[0])}~${fmt(cmpDates[cmpDates.length-1])}`:'데이터 없음';
+  const now=new Date();
+  const dateStr=`${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
+
+  // 비교 기간 라벨
+  const lblEl=document.getElementById('wk-cmp-label');
+  if(lblEl) lblEl.textContent=`비교: ${typeName} (${cmpRng})`;
+
+  // Header labels
+  const el=id=>document.getElementById(id);
+  if(el('wk-period-label')) el('wk-period-label').textContent=`기준: ${rng}  vs  ${typeName}: ${cmpRng}`;
+  if(el('wk-generated')) el('wk-generated').textContent=`생성일: ${dateStr}`;
+  if(el('wk-footer-date')) el('wk-footer-date').textContent=dateStr+' 생성';
+
+  // 이하 ba를 a로 ca2를 ca로 사용
+  const a=ba, ca=ca2;
+
+  // ── Score ──────────────────────────────────────────────────────────────
+  const dailyRoas=a.cost.map((c,i)=>c>0?a.rev[i]/c*100:null).filter(r=>r!==null);
+  const roasAvg=dailyRoas.reduce((s,v)=>s+v,0)/(dailyRoas.length||1);
+  const roasStdDev=Math.sqrt(dailyRoas.reduce((s,v)=>s+(v-roasAvg)**2,0)/(dailyRoas.length||1));
+  const volatility=roasAvg>0?roasStdDev/roasAvg*100:0;
+  const score=Math.round(Math.min(a.roas/10,100)*0.3+Math.min(a.cvr*5,100)*0.25+Math.min(a.ctr*80,100)*0.1+Math.max(0,100-a.cpc/20)*0.15+Math.max(0,100-volatility*0.8)*0.2);
+  if(el('wk-score')){
+    el('wk-score').textContent=score;
+    el('wk-score').style.color=score>=75?'#16a34a':score>=50?'#d97706':'#dc2626';
+  }
+
+  // ── KPI cards ─────────────────────────────────────────────────────────
+  const kpiRow=el('wk-kpi-row');
+  if(kpiRow){
+    const kpis=[
+      {l:'ROAS',      cur:a.roas,  prev:ca?ca.roas:null,  fmt:v=>v.toFixed(1)+'%',  c:'#2563eb', inv:false},
+      {l:'전환매출',  cur:a.tR,    prev:ca?ca.tR:null,    fmt:v=>fK(v)+'원',        c:'#16a34a', inv:false},
+      {l:'광고비',    cur:a.tCo,   prev:ca?ca.tCo:null,   fmt:v=>fK(v)+'원',        c:'#d97706', inv:true},
+      {l:'주문수',    cur:a.tO,    prev:ca?ca.tO:null,    fmt:v=>v.toLocaleString()+'건', c:'#7c3aed', inv:false},
+    ];
+    kpiRow.innerHTML=kpis.map(k=>{
+      let chgHtml='';
+      let prevHtml='';
+      if(k.prev!=null&&k.prev>0){
+        let chg=(k.cur-k.prev)/k.prev*100;
+        if(k.inv) chg=-chg; // 광고비는 낮을수록 좋으므로 반전
+        const clr=chg>=0?'#16a34a':'#dc2626';
+        chgHtml=`<div style="font-size:11px;font-weight:700;color:${clr};margin-top:2px;">${chg>=0?'▲':'▼'} ${Math.abs(chg).toFixed(1)}%</div>`;
+        prevHtml=`<div style="font-size:9.5px;color:#8a9aaa;margin-top:2px;">${typeName}: ${k.fmt(k.prev)}</div>`;
+      }
+      return `<div style="background:#f4f7ff;border-radius:8px;padding:10px 12px;border-top:2px solid ${k.c};">
+        <div style="font-size:10px;color:#5a6a80;margin-bottom:3px;font-weight:500;">${k.l}</div>
+        <div style="font-size:15px;font-weight:700;color:#1a2744;">${k.fmt(k.cur)}</div>
+        ${chgHtml}${prevHtml}
+      </div>`;
+    }).join('');
+  }
+
+  // ── 4 Trend Charts ─────────────────────────────────────────────────────
+  const n=a.dates.length;
+  const xL=a.dates.map(d=>`${d.slice(6,8)}일`);
+  const prevN=ca?ca.dates.length:0;
+  const pad=(arr,len)=>{const r=[...arr];while(r.length<len)r.push(null);return r.slice(0,len);};
+
+  const WK_OPTS=(color,fmtFn)=>({
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#4a5a6a',font:{size:9},boxWidth:12,boxHeight:2}}},
+    scales:{
+      x:{grid:{color:'rgba(0,0,0,.05)',drawBorder:false},ticks:{color:'#6a7a8a',font:{size:9}},border:{display:false}},
+      y:{grid:{color:'rgba(0,0,0,.05)',drawBorder:false},ticks:{color:'#6a7a8a',font:{size:9},callback:fmtFn},border:{display:false}}
+    }
+  });
+
+  function mkWkChart(id,aData,bData,color,fmtFn,label2){
+    const el2=document.getElementById(id); if(!el2)return; dc(id);
+    const datasets=[{label:'기준',data:pad(aData,n),borderColor:color,backgroundColor:color+'22',borderWidth:2,pointRadius:n>14?0:3,fill:true,tension:.35}];
+    if(bData&&bData.length) datasets.push({label:label2||'이전',data:pad(bData,n),borderColor:color+'66',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,tension:.35});
+    CHS[id]=new Chart(el2,{type:'line',data:{labels:xL,datasets},options:WK_OPTS(color,fmtFn)});
+  }
+
+  const prevCost=ca?pad(ca.cost,n):null;
+  const prevRev=ca?pad(ca.rev,n):null;
+  const aRoas=a.cost.map((c,i)=>c>0?Math.round(a.rev[i]/c*100):0);
+  const bRoas=ca?(ca.cost||[]).map((c,i)=>c>0?Math.round((ca.rev[i]||0)/c*100):0):null;
+  const aCvr=a.click.map((cl,i)=>cl>0?+(a.orders[i]/cl*100).toFixed(2):0);
+  const bCvr=ca?(ca.click||[]).map((cl,i)=>cl>0?+(ca.orders[i]/cl*100).toFixed(2):0):null;
+
+  mkWkChart('wk-c-cost',a.cost,prevCost,'#2563eb',v=>(v/1000).toFixed(0)+'K',typeName);
+  mkWkChart('wk-c-rev',a.rev,prevRev,'#16a34a',v=>(v/1000).toFixed(0)+'K',typeName);
+  mkWkChart('wk-c-roas',aRoas,bRoas,'#d97706',v=>v+'%',typeName);
+  mkWkChart('wk-c-cvr',aCvr,bCvr,'#0891b2',v=>v+'%',typeName);
+
+  // ── AI Summary (2-column) ──────────────────────────────────────────────
+  const sn=nm=>{const m=nm.match(/_([^_]+)$/);return m?m[1]:nm;};
+  const camps=Object.entries(a.camps).map(([n,v])=>({n,...v})).sort((x,y)=>y.cost-x.cost).filter(c=>c.cost>0);
+  function campGrade(c){
+    if(!c.cost) return {g:'F'};
+    const r=c.rev/c.cost*100;
+    const cv=c.click>0?c.orders/c.click*100:0;
+    if(r>=700&&cv>=15) return {g:'S'};
+    if(r>=500&&cv>=8)  return {g:'A'};
+    if(r>=300&&cv>=4)  return {g:'B'};
+    if(r>=150&&cv>=1)  return {g:'C'};
+    return {g:'F'};
+  }
+  const graded=camps.map(c=>({...c,...campGrade(c)}));
+  const sCamps=graded.filter(c=>c.g==='S');
+  const fCamps=graded.filter(c=>c.g==='F');
+  const kws=Object.entries(a.kws).map(([k,v])=>({k,...v})).filter(x=>x.click>=10&&x.cost>0);
+  const topKw=kws.sort((a,b)=>(b.rev/b.cost)-(a.rev/a.cost))[0];
+  const half=Math.floor(a.dates.length/2);
+  const aFirst=agg(a.dates.slice(0,half)), aSecond=agg(a.dates.slice(half));
+  const roasTrend=aFirst.roas>0?(aSecond.roas-aFirst.roas)/aFirst.roas*100:0;
+
+  const aiSections=[
+    {t:'📊 기간 성과 요약',items:[
+      `총 광고비 <b>${fK(a.tCo)}원</b> · 전환매출 <b>${fK(a.tR)}원</b> · ROAS <b>${a.roas.toFixed(1)}%</b>`,
+      `노출 ${fK(a.tI)}회 · 클릭 ${a.tCl.toLocaleString()}회 (CTR ${a.ctr.toFixed(3)}%)`,
+      `주문 ${a.tO.toLocaleString()}건 · CVR ${a.cvr.toFixed(2)}% · CPA ${Math.round(a.cpa).toLocaleString()}원`,
+      `추세: ${roasTrend>10?'📈 후반 ROAS 상승 (+'+roasTrend.toFixed(0)+'%)':roasTrend<-10?'📉 후반 ROAS 하락 ('+roasTrend.toFixed(0)+'%)':'➡️ ROAS 안정 유지'}`
+    ]},
+    {t:'🎯 캠페인 진단',items:[
+      `S등급: ${sCamps.length?sCamps.map(c=>sn(c.n).slice(0,12)).join(', '):'없음'}`,
+      `F등급: ${fCamps.length?fCamps.map(c=>sn(c.n).slice(0,12)).join(', '):'없음'}`,
+      `전체 ${graded.length}개 · 상위(S+A) ${graded.filter(c=>['S','A'].includes(c.g)).length}개 · 하위(F) ${fCamps.length}개`,
+      topKw?`최고 키워드: "${topKw.k}" (ROAS ${Math.round(topKw.rev/topKw.cost*100)}%)`:' — '
+    ]}
+  ];
+
+  const aiBody=el('wk-ai-body');
+  if(aiBody) aiBody.innerHTML=aiSections.map(s=>`
+    <div style="background:#fff;border-radius:6px;padding:10px 12px;border-left:3px solid #2563eb;">
+      <div style="font-size:11px;font-weight:700;color:#1a2744;margin-bottom:6px;">${s.t}</div>
+      ${s.items.map(i=>`<div style="padding:2px 0;border-bottom:1px solid #f0f4ff;font-size:10.5px;color:#3a4a5a;">${i}</div>`).join('')}
+    </div>`).join('');
+}
+
+async function downloadWeeklyJPG(){
+  const a4=document.getElementById('weekly-a4');
+  if(!a4||typeof html2canvas==='undefined'){toast('html2canvas 로드 중. 잠시 후 다시 시도하세요.','#f59e0b');return;}
+  toast('JPG 생성 중...','#5ba3ff');
+  try{
+    const canvas=await html2canvas(a4,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    const link=document.createElement('a');
+    link.download=`주간보고_${new Date().toISOString().slice(0,10)}.jpg`;
+    link.href=canvas.toDataURL('image/jpeg',0.95);
+    link.click();
+    toast('✓ JPG 저장 완료','#28d480');
+  }catch(e){toast('JPG 생성 실패: '+e.message,'#ef4444');}
+}
+
+function downloadWeeklyPDF(){
+  const a4=document.getElementById('weekly-a4');
+  if(!a4)return;
+  // Print-based PDF: inject print styles, call print
+  const existStyle=document.getElementById('wk-print-style');
+  if(existStyle)existStyle.remove();
+  const s=document.createElement('style');
+  s.id='wk-print-style';
+  s.textContent=`
+    @media print{
+      body>*:not(#root):not(main):not(#app){display:none!important;}
+      .sidebar,nav,.nav-item,.sb-bot,.mode-bar,.pin-ov{display:none!important;}
+      .view:not(#v-weekly){display:none!important;}
+      #v-weekly .vt,#v-weekly .vs,#v-weekly>div:first-of-type+div{display:none!important;}
+      #weekly-a4{box-shadow:none!important;margin:0!important;max-width:100%!important;width:100%!important;page-break-after:avoid;}
+      @page{size:A4;margin:10mm;}
+    }`;
+  document.head.appendChild(s);
+  toast('인쇄 창에서 PDF로 저장하세요','#5ba3ff');
+  setTimeout(()=>{window.print();},300);
+}
+
+// ═══════════════════════════════════════════
 //  REPORT
 // ═══════════════════════════════════════════
 function renderReport(a,ca){
   if(!a.dates.length)return;
   const fmt=d=>`${d.slice(4,6)}.${d.slice(6,8)}`;
   const rng=a.dates.length?`${fmt(a.dates[0])}~${fmt(a.dates[a.dates.length-1])}`:'—';
-  document.getElementById('report-basis-vs').textContent=`선택 기간 (${rng}) 성과 종합 — 임원 보고용`;
+  document.getElementById('report-basis-vs').textContent=`선택 기간 (${rng}) 성과 종합`;
   if(ca&&cmpMode!=='none'){
     const pr=ca.dates.length?`${fmt(ca.dates[0])}~${fmt(ca.dates[ca.dates.length-1])}`:'—';
     const rb=document.getElementById('report-cmp-banner');
